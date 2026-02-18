@@ -12,6 +12,7 @@ It is a standalone script and doesn't require the installation of any additional
 
 - `Powershell version 7.1.3` or higher is recommended (minimum version 5.1)
 - Primarily uses `Az Powershell module` to pull workspace agent configuration information (https://learn.microsoft.com/en-us/powershell/azure/install-azps-windows?view=azps-11.0.0&tabs=powershell&pivots=windows-psgallery)
+- Compatible with both older Az.Accounts modules and **Az.Accounts >= 5.0.0 (Az >= 14.0.0)** (which changed `Get-AzAccessToken` to return a `SecureString`)
 - User will need Read/Write access to the specified workspace resource
 - Connect-AzAccount and Select-AzSubscription will be used to set the context for the script to run so proper Azure credentials will be needed
 

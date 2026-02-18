@@ -3,9 +3,9 @@ File: WorkspaceConfigToDCRMigrationTool.ps1
 Author: Azure Monitor Control Service
 Email: amcsdev@microsoft.com
 Description: This module contains code to help our customers migrate from MMA based configurations to AMA based configurations (DCR)
-Version: 1.0.1
+Version: 1.0.2
 
-Copyright (c) August 2024 Microsoft
+Copyright (c) February 2026 Microsoft
 #>
 
 # All the following variables are global
@@ -65,7 +65,7 @@ function Get-Greetings
 ####        where we help you step into the world of AMA and DCR      ####
 ####                                                                  ####
 ####                                                                  ####
-####             Azure Monitor Control Plane, August 2024             ####
+####             Azure Monitor Control Plane, February 2026           ####
 ##########################################################################
 
 "@
@@ -96,6 +96,31 @@ function Set-ValidateOutputFolder
             Exit
         }
     }
+}
+
+<#
+.DESCRIPTION
+    Gets a plain-text access token for Azure Management API.
+    Handles both old (string) and new (SecureString) versions of Get-AzAccessToken.
+    In Az.Accounts >= 5.0.0 (Az >= 14.0.0), the .Token property returns a SecureString instead of a plain string.
+#>
+function Get-AzAccessTokenPlainText
+{
+    $tokenObj = Get-AzAccessToken
+    $tokenObj | Out-Null # Shouldn't print this out to the console
+
+    if ($tokenObj.Token -is [System.Security.SecureString])
+    {
+        # Az.Accounts >= 5.0.0 (Az >= 14.0.0) returns SecureString
+        $plainToken = $tokenObj.Token | ConvertFrom-SecureString -AsPlainText
+    }
+    else
+    {
+        # Older Az.Accounts returns plain string
+        $plainToken = $tokenObj.Token
+    }
+
+    return $plainToken
 }
 
 <#
@@ -676,12 +701,11 @@ function Get-ProvisionDCE
     $dceRg = Read-Host          ">>>>> Resource Group      "
     $dceName = Read-Host        ">>>>> Name of the DCE     "
     Write-Host                  ">>>>> Location of the DCE : $($state.runtime.dcrLocation)"
-    $accessToken = Get-AzAccessToken
-    $accessToken | Out-Null # Shouldn't print this out to the console
+    $plainToken = Get-AzAccessTokenPlainText
 
-    $apiUrl = "https://management.azure.com/subscriptions/$($dceSubId)/resourceGroups/$($dceRg)/providers/Microsoft.Insights/dataCollectionEndpoints/$($dceName)?api-version=2022-06-01"
+    $apiUrl = "https://management.azure.com/subscriptions/$($dceSubId)/resourceGroups/$($dceRg)/providers/Microsoft.Insights/dataCollectionEndpoints/$($dceName)?api-version=2023-03-11"
     $headers = @{
-        'Authorization' = "Bearer $($accessToken.Token)"
+        'Authorization' = "Bearer $plainToken"
     }
 
     $body = @{
@@ -768,12 +792,11 @@ function Set-MigrateMMABasedCustomTable
         [string]$tableName
     )
 
-    $accessToken = Get-AzAccessToken
-    $accessToken | Out-Null # Shouldn't print this out to the console
+    $plainToken = Get-AzAccessTokenPlainText
 
     $apiUrl = "https://management.azure.com/$($state.runtime.workspace.ResourceId)/tables/$($tableName)/migrate?api-version=2021-12-01-preview"
     $headers = @{
-        'Authorization' = "Bearer $($accessToken.Token)"
+        'Authorization' = "Bearer $plainToken"
     }
 
     $response = Invoke-RestMethod -Uri $apiUrl -Method Post -Headers $headers
@@ -800,19 +823,19 @@ function Get-CustomLogs
 
         $filePatterns = @()
 
-        foreach ($input in $customLog.Properties.Inputs)
+        foreach ($inputEntry in $customLog.Properties.Inputs)
         {
-            if($null -ne $input.location.fileSystemLocations.linuxFileTypeLogPaths)
+            if($null -ne $inputEntry.location.fileSystemLocations.linuxFileTypeLogPaths)
             {
-                foreach ($linuxPath in $input.location.fileSystemLocations.linuxFileTypeLogPaths)
+                foreach ($linuxPath in $inputEntry.location.fileSystemLocations.linuxFileTypeLogPaths)
                 {
                     $filePatterns += $linuxPath
                 }
             }
 
-            if($null -ne $input.location.fileSystemLocations.windowsFileTypeLogPaths)
+            if($null -ne $inputEntry.location.fileSystemLocations.windowsFileTypeLogPaths)
             {
-                foreach ($windowsPath in $input.location.fileSystemLocations.windowsFileTypeLogPaths)
+                foreach ($windowsPath in $inputEntry.location.fileSystemLocations.windowsFileTypeLogPaths)
                 {
                     $windowsPathCorrected = $windowsPath.Replace("\\", "\")
                     $filePatterns += $windowsPathCorrected
@@ -866,7 +889,7 @@ function Get-CustomLogs
             $customStreamName = "Custom-Input-$($customLog.Properties.customLogName)"
             $outputStreamName = "Custom-$($customLog.Properties.customLogName)"
             $clArmTemplate.resources[0].properties["streamDeclarations"] = @{ 
-                $customStreamName = [ordered]@{ #Usinfg the default schema - Cx should update this to fit their use case
+                $customStreamName = [ordered]@{ #Using the default schema - Cx should update this to fit their use case
                     "columns" = @(
                         @{
                             "name" = "TimeGenerated";
@@ -919,12 +942,11 @@ function Get-IsIISLogsDataSourceEnabled
     param(
         [Parameter(Mandatory=$true)][System.Object] $workspace
     )
-    $accessToken = Get-AzAccessToken
-    $accessToken | Out-Null # Shouldn't print this out to the console
+    $plainToken = Get-AzAccessTokenPlainText
 
     $apiUrl = "https://management.azure.com$($workspace.ResourceId)/dataSources?%24filter=kind%20eq%20'IISLogs'&api-version=2020-08-01"
     $headers = @{
-        'Authorization' = "Bearer $($accessToken.Token)"
+        'Authorization' = "Bearer $plainToken"
     }
 
     $response = Invoke-RestMethod -Uri $apiUrl -Method Get -Headers $headers
